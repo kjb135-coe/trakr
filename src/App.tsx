@@ -6,32 +6,47 @@ interface Habit {
   name: string;
   completions: string[];
   streak: number;
+  isEditing?: boolean;
 }
 
 function App() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [newHabit, setNewHabit] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
-    const loadHabits = () => {
+    const loadData = () => {
       if (!window.chrome?.storage?.sync) {
         console.warn('Chrome storage not available - using mock data');
         return;
       }
 
-      window.chrome.storage.sync.get(['habits'], (result: { habits?: Habit[] }) => {
-        const storedHabits = result.habits || [];
-        setHabits(storedHabits);
-      });
+      window.chrome.storage.sync.get(
+        ['habits', 'darkMode'],
+        (result: { habits?: Habit[]; darkMode?: boolean }) => {
+          const storedHabits = result.habits || [];
+          const darkModePreference = result.darkMode || false;
+          setHabits(storedHabits);
+          setIsDarkMode(darkModePreference);
+        }
+      );
     };
 
-    loadHabits();
+    loadData();
   }, []);
 
   const saveHabits = (updatedHabits: Habit[]) => {
     setHabits(updatedHabits);
     if (window.chrome?.storage?.sync) {
       window.chrome.storage.sync.set({ habits: updatedHabits });
+    }
+  };
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    if (window.chrome?.storage?.sync) {
+      window.chrome.storage.sync.set({ darkMode: newDarkMode });
     }
   };
 
@@ -85,9 +100,34 @@ function App() {
     saveHabits(updatedHabits);
   };
 
+  const toggleEdit = (habitId: string) => {
+    setHabits(habits.map(habit => 
+      habit.id === habitId 
+        ? { ...habit, isEditing: !habit.isEditing } 
+        : habit
+    ));
+  };
+
+  const handleNameChange = (habitId: string, newName: string) => {
+    setHabits(habits.map(habit => 
+      habit.id === habitId 
+        ? { ...habit, name: newName } 
+        : habit
+    ));
+  };
+
   return (
-    <div className="container">
+    <div className="container" data-theme={isDarkMode ? "dark" : "light"}>
+      <button 
+        className="theme-toggle"
+        onClick={toggleDarkMode}
+        aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+      >
+        {isDarkMode ? '🌞' : '🌙'}
+      </button>
+      
       <h1>Daily Habits</h1>
+      
       <form onSubmit={addHabit} className="habit-form">
         <input
           type="text"
@@ -95,8 +135,13 @@ function App() {
           onChange={(e) => setNewHabit(e.target.value)}
           placeholder="Enter new habit"
           className="habit-input"
+          aria-label="New habit input"
         />
-        <button type="submit" className="add-button">
+        <button 
+          type="submit" 
+          className="add-button"
+          aria-label="Add new habit"
+        >
           Add Habit
         </button>
       </form>
@@ -111,19 +156,46 @@ function App() {
                   : ''
               }`}
               onClick={() => toggleCompletion(habit.id)}
+              aria-label={
+                habit.completions.includes(new Date().toISOString().split('T')[0]) 
+                  ? "Mark as incomplete" 
+                  : "Mark as complete"
+              }
             />
             
             <div className="habit-info">
-              <span className="habit-name">{habit.name}</span>
+              {habit.isEditing ? (
+                <input
+                  type="text"
+                  value={habit.name}
+                  onChange={(e) => handleNameChange(habit.id, e.target.value)}
+                  onBlur={() => toggleEdit(habit.id)}
+                  className="habit-edit-input"
+                  autoFocus
+                  aria-label="Edit habit name"
+                />
+              ) : (
+                <span className="habit-name">{habit.name}</span>
+              )}
               <span className="habit-streak">🔥 {habit.streak}</span>
             </div>
             
-            <button 
-              className="delete-button"
-              onClick={() => deleteHabit(habit.id)}
-            >
-              ×
-            </button>
+            <div className="habit-actions">
+              <button 
+                className="edit-button"
+                onClick={() => toggleEdit(habit.id)}
+                aria-label="Edit habit"
+              >
+                ✏️
+              </button>
+              <button 
+                className="delete-button"
+                onClick={() => deleteHabit(habit.id)}
+                aria-label="Delete habit"
+              >
+                ×
+              </button>
+            </div>
           </div>
         ))}
       </div>
